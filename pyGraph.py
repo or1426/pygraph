@@ -23,8 +23,10 @@ from matplotlib.backends.backend_wxagg import \
 class GraphPanel(wx.Panel):
     def __init__(self,parent):
         wx.Panel.__init__(self, parent)
-        self.colours = {'selected':'red',
-                        'unselected':'cyan',}
+        self.colours = {'selected':'orange',
+                        'unselected':'blue',
+                        'start':'green',
+                        'end':'red',}
         self.graph = Graph.Graph()
         self.initUI()
     def initUI(self):
@@ -70,7 +72,10 @@ class GraphPanel(wx.Panel):
         self.selectStuffRadBut=wx.RadioButton(self,
                                              label="select stuff mode",
                                              style=wx.RB_GROUP)
-        
+        self.selectStartEndRadBut=wx.RadioButton(self,
+                                                 label="select a start and end node for pathfinding")
+        self.Bind(wx.EVT_RADIOBUTTON, self.clear_all_selections, self.selectStartEndRadBut)
+
         self.createEdgeRadBut=wx.RadioButton(self,
                                              label="create edge mode")
         self.Bind(wx.EVT_RADIOBUTTON, self.clear_all_selections, self.createEdgeRadBut)
@@ -81,6 +86,7 @@ class GraphPanel(wx.Panel):
         
         self.radBoxSizer = wx.BoxSizer(wx.VERTICAL)
         self.radBoxSizer.Add(self.selectStuffRadBut)
+        self.radBoxSizer.Add(self.selectStartEndRadBut)
         self.radBoxSizer.Add(self.createEdgeRadBut)
         self.radBoxSizer.Add(self.createNodeRadBut)
         self.radBoxSizer.Add(self.changeEdgeWeightRadBut)
@@ -114,7 +120,6 @@ class GraphPanel(wx.Panel):
             xMin, xMax = -1, 1
         else:
             xMin, xMax = xMin + 0.2*(xMin-xMax)/2, xMax + 0.2*(xMax-xMin)/2
-
         if yMax - yMin < 2:
             yMin, yMax = -1, 1
         else:
@@ -124,54 +129,50 @@ class GraphPanel(wx.Panel):
         
         self.canvas.draw()
 
+    def get_clicked_thing_and_type(self, event):
+        for node in self.graph.node_list:
+            if node.artist == event.artist:
+                return node, 'node'
+            else:
+                for edge in node.edge_list:
+                    if edge.artist == event.artist:
+                        return edge, 'edge'
+        return None, None
+
     def on_pick(self, event):
         # The event received here is of the type
         # matplotlib.backend_bases.PickEvent
-        #
-        # It carries lots of information, of which we're using
-        # only a small amount here.
-        # 
-       
-        #print self.graph.node_list
-        clicked_node, = None,
-        for node in self.graph.node_list:
-            if node.artist == event.artist:
-                clicked_node = node
-        if self.selectStuffRadBut.GetValue():
-            if event.mouseevent.button == 1:
-                if clicked_node != None:
-                    clicked_node.state = 'selected'
-                    return self.draw_figure()
-                else:
-                    clicked_edge = None
-                    for node in self.graph.node_list:
-                        for edge in node.edge_list:
-                            if edge.artist == event.artist:
-                                if edge.state == 'selected':
-                                    edge.state = 'unselected'
-                                else:
-                                    edge.state = 'selected'
-        elif self.changeEdgeWeightRadBut.GetValue():
-            clicked_edge = None
-            for node in self.graph.node_list:
-                for edge in node.edge_list:
-                    if edge.artist == event.artist:
-                        wx.CallAfter(self.change_edge_length,edge)
-        elif self.createEdgeRadBut.GetValue():
-            if any([node.state == 'selected' for node in self.graph.node_list]):
-                for node in self.graph.node_list:
-                    if node.state == 'selected':
-                        new_edge = node.add_edge_to(clicked_node, 5)
-                        node.state = 'unselected'
-            else:
-                clicked_node.state = 'selected'
+        clicked_thing, clicked_thing_type = self.get_clicked_thing_and_type(event)
 
+
+        if event.mouseevent.button == 1:
+            if self.selectStuffRadBut.GetValue():
+                if clicked_thing != None:
+                    clicked_thing.state = 'selected'
+            elif self.changeEdgeWeightRadBut.GetValue():
+                if clicked_thing_type == 'edge':
+                    wx.CallAfter(self.change_edge_length,clicked_thing)
+            elif self.createEdgeRadBut.GetValue() and clicked_thing_type == 'node':
+                if any([node.state == 'selected' for node in self.graph.node_list]):
+                    for node in self.graph.node_list:
+                        if node.state == 'selected':
+                            new_edge = node.add_edge_to(clicked_thing, 5, colours=self.colours)
+                            node.state = 'unselected'
+                else:
+                    clicked_thing.state = 'selected'
+            elif self.selectStartEndRadBut.GetValue() and clicked_thing_type == 'node':
+                if any([node.state == 'start' for node in self.graph.node_list]):
+                    if not any([node.state == 'end' for node in self.graph.node_list]):
+                        clicked_thing.state = 'end'
+                else:
+                    clicked_thing.state = 'start'
+        self.draw_figure()
     def on_click(self, event):
         if event.button == 3:
             self.clear_all_selections()
         if event.button == 1 and self.createNodeRadBut.GetValue():
             self.graph.add_node(Graph.Node(str(len(self.graph.node_list)), 
-                                           event.xdata,event.ydata ))
+                                           event.xdata,event.ydata,colours=self.colours))
         self.draw_figure()
 
     def change_edge_length(self,edge):
@@ -189,7 +190,6 @@ class GraphPanel(wx.Panel):
                     for edge in node.edge_list[:]:
                         if edge.dest_node == selected_node:
                             node.edge_list.remove(edge)
-
             for node in self.graph.node_list:
                 for edge in node.edge_list:
                     if edge.state == 'selected':
@@ -235,10 +235,14 @@ class BarsFrame(wx.Frame):
         menu_ops = wx.Menu()
 
         menu_ops_in_graph = wx.Menu()
-        m_del_edges = menu_ops_in_graph.Append(-1, "Delete all edges", "Why would you want to do this?")
 
+        m_del_edges = menu_ops_in_graph.Append(-1, "Delete all edges", "Why would you want to do this?")
         self.Bind(wx.EVT_MENU, self.on_delete_edges, m_del_edges)
+
         menu_ops_new_graph = wx.Menu()
+
+        m_dijkstra = menu_ops_new_graph.Append(-1,"Dijkstra's algorithm", "Find shortest path from start to end node")
+        self.Bind(wx.EVT_MENU, self.dijkstra, m_dijkstra)
 
         menu_ops.AppendMenu(-1,"Within one graph",menu_ops_in_graph)
         menu_ops.AppendMenu(-1,"Outputting new graph",menu_ops_new_graph)
@@ -267,7 +271,32 @@ class BarsFrame(wx.Frame):
     def create_status_bar(self):
         self.statusbar = self.CreateStatusBar()
 
-    
+    def dijkstra(self, event):
+        current_graph_page = self.notebook.GetCurrentPage()
+        current_graph = current_graph_page.graph
+        if not any([node.state == 'start' for node in current_graph.node_list]):
+            self.flash_status_message("You need a start node")
+            return
+        if not any([node.state == 'end' for node in current_graph.node_list]):
+            self.flash_status_message("You need an end node")
+            return
+
+        start_node, end_node = None, None
+        for node in current_graph.node_list:
+            if node.state == 'start':
+                start_node = node
+            if node.state == 'end':
+                end_node = node
+
+        path = current_graph.dijkstra(start_node = start_node, end_node = end_node)
+        new_graph_panel = GraphPanel(self.notebook)
+        new_graph_panel.graph.node_list = path
+        self.graph_panels.append(new_graph_panel) 
+        self.notebook.AddPage(new_graph_panel,"D")
+
+        new_graph_panel.draw_figure()
+
+
     def on_save_plot(self, event):
         file_choices = "GRAPH (*.graph)|*.graph"
         dlg = wx.FileDialog(

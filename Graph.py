@@ -86,4 +86,60 @@ class Graph(object):
     def add_node(self, node):
         self.node_list.append(node)
 
-    
+    def dijkstra(self, start_node, end_node = None):
+        if not any(start_node == node for node in self.node_list):
+            raise ValueError("The start node must be in the graph!")
+
+        found_end_node = False
+
+        dist, visited, previous = {}, {}, {}
+        for node in self.node_list:
+            dist[node] = float('inf')
+            visited[node] = False
+            previous[node] = None
+
+        dist[start_node] = 0
+
+        active_nodes = [start_node]
+
+        while not len(active_nodes) == 0:
+            #we want the current node to be the one in active_nodes with the shotrest distance
+            min_dist = min([dist[node] for node in dist if node in active_nodes])
+
+            for node in active_nodes:
+                if min_dist == dist[node]:
+                    active_nodes.remove(node)
+                    current_node = node
+                    break
+
+            visited[current_node] = True
+
+            if current_node == end_node:
+                found_end_node = True
+                break
+
+            for edge in current_node.edge_list:
+                neighbor, length = edge.dest_node, edge.length
+                alt = dist[current_node] + length
+                if alt < dist[neighbor]:
+                    dist[neighbor] = alt
+                    previous[neighbor] = current_node
+                    if not visited[neighbor]:
+                        active_nodes.append(neighbor)
+
+        if not found_end_node:
+            return []
+        else:
+            backwards_path = [end_node]
+            current_node = end_node
+            while previous[current_node] != None:
+                current_node = previous[current_node]
+                backwards_path.append(current_node)
+
+            for node in backwards_path:
+                for edge in node.edge_list[:]:
+                    if not any([edge.dest_node == other_node for other_node in backwards_path]):
+                        node.edge_list.remove(edge)
+
+            return backwards_path[::-1]
+
