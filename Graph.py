@@ -138,8 +138,8 @@ class Graph(object):
 
             for node in backwards_path:
                 for edge in node.edge_list[:]:
-                    if not any([edge.dest_node == other_node for other_node in backwards_path]):
+                    if previous[edge.dest_node]!=node or not any([edge.dest_node == other_node for other_node in backwards_path]):
                         node.edge_list.remove(edge)
 
-            return backwards_path[::-1]
+            return backwards_path
 
