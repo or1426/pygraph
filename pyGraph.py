@@ -144,7 +144,6 @@ class GraphPanel(wx.Panel):
         # matplotlib.backend_bases.PickEvent
         clicked_thing, clicked_thing_type = self.get_clicked_thing_and_type(event)
 
-
         if event.mouseevent.button == 1:
             if self.selectStuffRadBut.GetValue():
                 if clicked_thing != None:
